@@ -5,3 +5,6 @@ Testing:
 - Proper checkout of master branch
 - Diff detection between branches
 - PR creation with peter-evans/create-pull-request action
+- Proper use of GH_TOKEN secret
+
+Adding this additional text to trigger the workflow again and create more differences between branches.
