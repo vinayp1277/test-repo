@@ -1,0 +1,2 @@
+This is the final test trigger for the GitHub CLI approach.
+This should create a pull request even if the branches are already in sync.
