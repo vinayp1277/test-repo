@@ -44,6 +44,7 @@ The project is configured with Dependabot to:
 The repository includes a GitHub Actions workflow that:
 - Monitors for pushes to the `master` branch
 - Automatically creates a PR to sync changes from `master` to `master-jdk21`
+- Uses peter-evans/create-pull-request action for reliable PR creation
 
 ## Getting Started
 
