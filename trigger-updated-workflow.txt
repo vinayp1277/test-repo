@@ -1,0 +1,6 @@
+This file is created to trigger the updated workflow with improved debugging and permissions.
+The workflow should now:
+1. Explicitly set permissions for GITHUB_TOKEN
+2. Show detailed debugging information
+3. Better handle cases where master-jdk21 doesn't exist
+4. Create a PR with information about the changes included
