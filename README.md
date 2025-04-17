@@ -1,4 +1,4 @@
-# Spring Boot JDK 21 Demo
+# Spring Boot JDK 21 test project 
 
 This is a simple Spring Boot project configured with JDK 21. The project demonstrates:
 
