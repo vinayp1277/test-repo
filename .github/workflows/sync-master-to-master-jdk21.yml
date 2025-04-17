@@ -1,45 +1,20 @@
 name: Sync master to master-jdk21
-
 on:
   push:
     branches:
       - master
-
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
-      - name: Create sync PR
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Fetch the latest changes from both branches
-          git fetch origin master
-          git fetch origin master-jdk21
-          
-          # Create a new branch for the sync PR
-          SYNC_BRANCH="sync-master-to-jdk21-$(date +%Y%m%d%H%M%S)"
-          git checkout -b $SYNC_BRANCH origin/master-jdk21
-          
-          # Merge master into the sync branch
-          git merge origin/master --no-edit
-          
-          # Push the sync branch to the repository
-          git push origin $SYNC_BRANCH
-          
-          # Create a pull request
-          PR_URL=$(gh pr create --base master-jdk21 --head $SYNC_BRANCH \
-                  --title "Sync: Merge master into master-jdk21" \
-                  --body "This PR was automatically created by the sync workflow to keep master-jdk21 branch up to date with master.")
-          
-          echo "Created sync PR: $PR_URL"
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          branch: sync/master-to-master-jdk21
+          base: master-jdk21
+          title: 'Sync: master to master-jdk21'
+          body: 'Automated PR to sync changes from master to master-jdk21'
