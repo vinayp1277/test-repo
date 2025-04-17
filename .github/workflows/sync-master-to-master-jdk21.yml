@@ -16,11 +16,6 @@ jobs:
         with:
           fetch-depth: 0
           
-      - name: Setup Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions@github.com"
-          
       - name: Check if master-jdk21 branch exists
         id: check_branch
         run: |
@@ -37,11 +32,6 @@ jobs:
         run: |
           git checkout -b master-jdk21
           git push origin master-jdk21
-          
-      - name: Create changes branch
-        run: |
-          git checkout master
-          git checkout -b sync-temp-branch
           
       - name: Create Pull Request
         id: cpr
