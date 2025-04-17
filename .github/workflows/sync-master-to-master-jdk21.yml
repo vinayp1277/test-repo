@@ -1,0 +1,20 @@
+name: Sync master to master-jdk21
+on:
+  push:
+    branches:
+      - master
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          branch: sync/master-to-master-jdk21
+          base: master-jdk21
+          title: 'Sync: master to master-jdk21'
+          body: 'Automated PR to sync changes from master to master-jdk21'
