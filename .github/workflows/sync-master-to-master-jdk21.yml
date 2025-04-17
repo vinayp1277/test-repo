@@ -1,42 +1,40 @@
-name: Sync master to master-jdk21
+name: Debug Sync Workflow
 on:
   push:
     branches:
       - master
 jobs:
-  sync-branches:
+  debug-sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master
+      - name: Checkout repo
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-          ref: master
-      - name: Fetch all remote branches
-        run: git fetch --all
-      - name: Check if master has changes compared to master-jdk21
-        id: diffcheck
+        
+      - name: Debug environment
         run: |
-          git fetch origin master-jdk21
-          if git diff --quiet origin/master-jdk21...HEAD; then
-            echo "No changes to sync — exiting."
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "Changes detected — proceeding with PR creation."
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-      - name: Exit early if no changes
-        if: steps.diffcheck.outputs.skip == 'true'
-        run: exit 0
-      - name: Create Pull Request to merge master into master-jdk21
+          echo "Repository: ${{ github.repository }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Has GH_TOKEN: ${{ secrets.GH_TOKEN != '' }}"
+          git --version
+          
+      - name: Attempt PR creation
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GH_TOKEN }}
-          branch: sync/master-to-master-jdk21
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: debug-sync-branch
           base: master-jdk21
-          title: 'Sync: master to master-jdk21'
-          body: |
-            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
-            > Created by GitHub Actions via [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request)
-          commit-message: 'chore: sync master into master-jdk21'
-          delete-branch: false
+          title: 'Debug: Sync test PR'
+          body: 'Testing PR creation from workflow'
+          
+      - name: Check if master-jdk21 exists
+        run: |
+          git fetch origin || echo "Fetch failed"
+          git branch -r
+          if git show-ref --quiet refs/remotes/origin/master-jdk21; then
+            echo "master-jdk21 branch exists"
+          else
+            echo "master-jdk21 branch does NOT exist"
+            echo "Creating master-jdk21 branch"
+            git checkout -b master-jdk21
+            git push origin master-jdk21
+          fi
