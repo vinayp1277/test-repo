@@ -39,7 +39,7 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GH_TOKEN }}
-          branch: sync/master-to-master-jdk21
+          branch: master
           base: master-jdk21
           title: 'Sync: master to master-jdk21'
           body: |
