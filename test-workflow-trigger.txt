@@ -1,0 +1,2 @@
+This is a test file to trigger the updated workflow.
+Let's see if the sync PR gets created properly now.

@@ -1,0 +1,42 @@
+name: Sync master to master-jdk21
+on:
+  push:
+    branches:
+      - master
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          ref: master
+      - name: Fetch all remote branches
+        run: git fetch --all
+      - name: Check if master has changes compared to master-jdk21
+        id: diffcheck
+        run: |
+          git fetch origin master-jdk21
+          if git diff --quiet origin/master-jdk21...HEAD; then
+            echo "No changes to sync — exiting."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected — proceeding with PR creation."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Exit early if no changes
+        if: steps.diffcheck.outputs.skip == 'true'
+        run: exit 0
+      - name: Create Pull Request to merge master into master-jdk21
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          branch: sync/master-to-master-jdk21
+          base: master-jdk21
+          title: 'Sync: master to master-jdk21'
+          body: |
+            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
+            > Created by GitHub Actions via [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request)
+          commit-message: 'chore: sync master into master-jdk21'
+          delete-branch: false

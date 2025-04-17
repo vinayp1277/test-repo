@@ -1,0 +1,2 @@
+This file is created specifically to ensure that master has content that master-jdk21 doesn't have.
+This should force the workflow to create a PR since there will be actual differences between the branches.

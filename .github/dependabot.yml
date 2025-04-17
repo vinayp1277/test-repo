@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Enable version updates for Maven
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Enable security updates
+    # This is the correct setting for enabling security updates
+    vulnerability-alerts: true
+    # Assign the pull requests to specific reviewers
+    assignees:
+      - "vinayp1277"
+    # Labels to apply to pull requests
+    labels:
+      - "dependencies"
+      - "security"
+    # Allow up to 3 pull requests for dependencies
+    pull-request-branch-name:
+      separator: "-"
+    # Advanced settings
+    commit-message:
+      prefix: "dependabot"
+      include: "scope"
+      
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "actions"
