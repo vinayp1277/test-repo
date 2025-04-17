@@ -1,40 +1,56 @@
-name: Debug Sync Workflow
+name: Sync master to master-jdk21
 on:
   push:
     branches:
       - master
 jobs:
-  debug-sync:
+  sync-branches:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout master
         uses: actions/checkout@v3
-        
-      - name: Debug environment
-        run: |
-          echo "Repository: ${{ github.repository }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Has GH_TOKEN: ${{ secrets.GH_TOKEN != '' }}"
-          git --version
+        with:
+          fetch-depth: 0
+          ref: master
           
-      - name: Attempt PR creation
+      - name: Fetch branches and show differences
+        run: |
+          git fetch origin || echo "Fetch failed"
+          git fetch origin master-jdk21 || echo "First run - master-jdk21 doesn't exist yet"
+          
+          echo "=== Branches on remote ==="
+          git branch -r
+          
+          if git show-ref --quiet refs/remotes/origin/master-jdk21; then
+            echo "=== Differences between master and master-jdk21 ==="
+            git log --oneline origin/master-jdk21..HEAD
+            echo "=== Number of commits different ==="
+            git rev-list --count origin/master-jdk21..HEAD
+            DIFF_COUNT=$(git rev-list --count origin/master-jdk21..HEAD)
+            if [[ "$DIFF_COUNT" -eq "0" ]]; then
+              echo "No differences found - would not create PR"
+            else
+              echo "Found $DIFF_COUNT differences - would create PR"
+            fi
+          else
+            echo "master-jdk21 branch doesn't exist, will be created and will need a PR"
+          fi
+          
+      - name: Create Pull Request to sync changes
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: debug-sync-branch
+          branch: sync/master-to-master-jdk21
           base: master-jdk21
-          title: 'Debug: Sync test PR'
-          body: 'Testing PR creation from workflow'
-          
-      - name: Check if master-jdk21 exists
-        run: |
-          git fetch origin || echo "Fetch failed"
-          git branch -r
-          if git show-ref --quiet refs/remotes/origin/master-jdk21; then
-            echo "master-jdk21 branch exists"
-          else
-            echo "master-jdk21 branch does NOT exist"
-            echo "Creating master-jdk21 branch"
-            git checkout -b master-jdk21
-            git push origin master-jdk21
-          fi
+          title: 'Sync: master to master-jdk21'
+          body: |
+            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
+            
+            Changes included:
+            ```
+            $(git log --oneline origin/master-jdk21..HEAD || echo "All master branch changes")
+            ```
+            
+            > Created by GitHub Actions workflow
+          commit-message: 'chore: sync master into master-jdk21'
+          delete-branch: false
