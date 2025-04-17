@@ -10,6 +10,28 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
+          ref: master
+      
+      - name: Set up Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+      
+      - name: Fetch branches
+        run: |
+          git fetch origin master
+          git fetch origin master-jdk21 || echo "master-jdk21 branch does not exist yet"
+      
+      - name: Create sync branch
+        run: |
+          git checkout -b sync-branch
+          echo "Created sync branch"
+      
+      - name: Push to GitHub
+        run: |
+          git push -f origin sync-branch:sync/master-to-master-jdk21
+          echo "Pushed sync branch"
+          
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
         with:
@@ -18,3 +40,4 @@ jobs:
           base: master-jdk21
           title: 'Sync: master to master-jdk21'
           body: 'Automated PR to sync changes from master to master-jdk21'
+          draft: false
