@@ -1,0 +1,6 @@
+This file is created to trigger the workflow that uses GitHub CLI.
+The workflow should now:
+1. Check for differences using git rev-list
+2. Use GitHub CLI to create PRs directly
+3. Handle pre-existing PRs properly
+4. Provide better debugging output
