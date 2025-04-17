@@ -58,3 +58,6 @@ The application will be available at http://localhost:8080
 ## Branches
 - `master`: Main development branch
 - `master-jdk21`: JDK 21 specific branch that stays in sync with master
+
+## Note on GitHub Actions
+Make sure to add the GH_TOKEN secret to your repository for the GitHub Actions workflow to function properly.
