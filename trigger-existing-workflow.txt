@@ -1,0 +1,4 @@
+This file is created to trigger the existing workflow without modifying any workflow files.
+The action should detect this change and create a PR if needed.
+
+Testing the unchanged workflow with this simple change.
