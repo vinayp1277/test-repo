@@ -3,74 +3,40 @@ on:
   push:
     branches:
       - master
-
 jobs:
-  create-sync-pr:
+  sync-branches:
     runs-on: ubuntu-latest
-    # Permissions needed for creating PRs
-    permissions:
-      contents: write
-      pull-requests: write
-      
     steps:
-      - name: Checkout code
+      - name: Checkout master
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          
-      - name: Set up Git
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions@github.com"
-          
-      - name: Check if master-jdk21 branch exists
-        id: check_branch
-        run: |
-          git fetch --all
-          if git show-ref --verify --quiet refs/remotes/origin/master-jdk21; then
-            echo "Branch exists"
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "Branch doesn't exist"
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-          
-      - name: Create master-jdk21 branch if it doesn't exist
-        if: steps.check_branch.outputs.exists == 'false'
-        run: |
-          git checkout -b master-jdk21
-          git push origin master-jdk21
-          echo "Created master-jdk21 branch"
-          
-      - name: Check for differences
-        id: diff_check
+          ref: master
+      - name: Fetch all remote branches
+        run: git fetch --all
+      - name: Check if master has changes compared to master-jdk21
+        id: diffcheck
         run: |
           git fetch origin master-jdk21
-          DIFF_COUNT=$(git rev-list --count origin/master-jdk21..HEAD)
-          echo "Number of commits different: $DIFF_COUNT"
-          
-          if [ "$DIFF_COUNT" -gt "0" ]; then
-            echo "Changes detected, will create PR"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+          if git diff --quiet origin/master-jdk21...HEAD; then
+            echo "No changes to sync — exiting."
+            echo "skip=true" >> $GITHUB_OUTPUT
           else
-            echo "No changes detected, will skip PR"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "Changes detected — proceeding with PR creation."
+            echo "skip=false" >> $GITHUB_OUTPUT
           fi
-          
-      - name: Create PR using GitHub CLI
-        if: steps.diff_check.outputs.has_changes == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Check if PR already exists
-          EXISTING_PR=$(gh pr list --base master-jdk21 --head master --json number | jq -r '.[].number')
-          
-          if [ -z "$EXISTING_PR" ]; then
-            # Create PR directly from master to master-jdk21
-            gh pr create --base master-jdk21 --head master \
-              --title "Sync: master to master-jdk21" \
-              --body "This is an automated pull request to sync the latest changes from master to master-jdk21."
-            echo "Pull request created"
-          else
-            echo "Pull request #$EXISTING_PR already exists"
-          fi
+      - name: Exit early if no changes
+        if: steps.diffcheck.outputs.skip == 'true'
+        run: exit 0
+      - name: Create Pull Request to merge master into master-jdk21
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          branch: sync/master-to-master-jdk21
+          base: master-jdk21
+          title: 'Sync: master to master-jdk21'
+          body: |
+            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
+            > Created by GitHub Actions via [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request)
+          commit-message: 'chore: sync master into master-jdk21'
+          delete-branch: false
