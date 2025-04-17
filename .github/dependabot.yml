@@ -23,6 +23,9 @@ updates:
     commit-message:
       prefix: "dependabot"
       include: "scope"
+    # Use GH_TOKEN for authentication
+    registries:
+      - maven-github
       
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
@@ -33,3 +36,19 @@ updates:
     labels:
       - "dependencies"
       - "actions"
+    # Use GH_TOKEN for authentication with GitHub actions
+    registries:
+      - github-actions
+
+# Define GitHub token for authentication
+registries:
+  maven-github:
+    type: maven-repository
+    url: https://maven.pkg.github.com/*
+    username: vinayp1277
+    password: ${{secrets.GH_TOKEN}}
+  github-actions:
+    type: git
+    url: https://github.com
+    username: x-access-token
+    password: ${{secrets.GH_TOKEN}}
