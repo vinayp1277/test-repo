@@ -3,54 +3,57 @@ on:
   push:
     branches:
       - master
+
 jobs:
   sync-branches:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout master
+      - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: master
-          
-      - name: Fetch branches and show differences
-        run: |
-          git fetch origin || echo "Fetch failed"
-          git fetch origin master-jdk21 || echo "First run - master-jdk21 doesn't exist yet"
-          
-          echo "=== Branches on remote ==="
-          git branch -r
-          
-          if git show-ref --quiet refs/remotes/origin/master-jdk21; then
-            echo "=== Differences between master and master-jdk21 ==="
-            git log --oneline origin/master-jdk21..HEAD
-            echo "=== Number of commits different ==="
-            git rev-list --count origin/master-jdk21..HEAD
-            DIFF_COUNT=$(git rev-list --count origin/master-jdk21..HEAD)
-            if [[ "$DIFF_COUNT" -eq "0" ]]; then
-              echo "No differences found - would not create PR"
-            else
-              echo "Found $DIFF_COUNT differences - would create PR"
-            fi
-          else
-            echo "master-jdk21 branch doesn't exist, will be created and will need a PR"
-          fi
-          
-      - name: Create Pull Request to sync changes
-        uses: peter-evans/create-pull-request@v5
-        with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: sync/master-to-master-jdk21
-          base: master-jdk21
-          title: 'Sync: master to master-jdk21'
-          body: |
-            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
-            
-            Changes included:
-            ```
-            $(git log --oneline origin/master-jdk21..HEAD || echo "All master branch changes")
-            ```
-            
-            > Created by GitHub Actions workflow
-          commit-message: 'chore: sync master into master-jdk21'
-          delete-branch: false
+      
+      - name: Set up Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+      
+      - name: Check if master-jdk21 branch exists
+        id: check_branch
+        run: |
+          if git ls-remote --heads origin master-jdk21 | grep master-jdk21; then
+            echo "Branch exists"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "Branch does not exist"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create master-jdk21 branch if it does not exist
+        if: steps.check_branch.outputs.exists == 'false'
+        run: |
+          git checkout -b master-jdk21
+          git push origin master-jdk21
+      
+      - name: Create or update sync branch
+        run: |
+          git fetch origin
+          git checkout -b sync-branch
+          git reset --hard origin/master
+          git push -f origin sync-branch:sync/master-to-master-jdk21
+      
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_EXISTS=$(gh pr list --base master-jdk21 --head sync/master-to-master-jdk21 --json number | jq length)
+          
+          if [ "$PR_EXISTS" -eq "0" ]; then
+            gh pr create --base master-jdk21 --head sync/master-to-master-jdk21 \
+              --title "Sync: master to master-jdk21" \
+              --body "This is an automated pull request to sync the latest changes from master to master-jdk21."
+            echo "Pull request created"
+          else
+            echo "Pull request already exists"
+          fi
