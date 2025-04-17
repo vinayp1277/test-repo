@@ -11,48 +11,35 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout
+      - name: Checkout master
         uses: actions/checkout@v3
         with:
+          ref: master
           fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}  # Using PAT instead of GITHUB_TOKEN
           
-      - name: Check if master-jdk21 branch exists
-        id: check_branch
+      - name: Checkout or create master-jdk21 branch
         run: |
-          if git ls-remote --heads origin master-jdk21 | grep master-jdk21; then
-            echo "Branch exists"
-            echo "exists=true" >> $GITHUB_OUTPUT
+          echo "Checking if branch exists..."
+          if git fetch origin master-jdk21 2>/dev/null; then
+            echo "Branch exists, creating PR to update it"
           else
-            echo "Branch does not exist"
-            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Branch doesn't exist, creating it"
+            git checkout -b master-jdk21
+            git push origin master-jdk21
+            git checkout master
           fi
           
-      - name: Create master-jdk21 branch if it doesn't exist
-        if: steps.check_branch.outputs.exists == 'false'
-        run: |
-          git checkout -b master-jdk21
-          git push origin master-jdk21
-          
-      - name: Create Pull Request
-        id: cpr
+      - name: Create Pull Request for syncing
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Sync changes from master to master-jdk21
-          committer: GitHub <noreply@github.com>
-          author: ${{ github.actor }} <${{ github.actor }}@users.noreply.github.com>
-          branch: sync/master-to-master-jdk21
-          delete-branch: true
+          token: ${{ secrets.GH_TOKEN }}  # Using PAT instead of GITHUB_TOKEN
           base: master-jdk21
+          branch: sync/master-to-master-jdk21
           title: 'Sync: master to master-jdk21'
           body: |
             Automated PR to sync changes from master to master-jdk21
             
             This PR was created automatically by the GitHub Actions workflow.
-          draft: false
-          
-      - name: Check outputs
-        if: steps.cpr.outputs.pull-request-number
-        run: |
-          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
-          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+          commit-message: "Sync changes from master to master-jdk21"
+          delete-branch: true
