@@ -12,16 +12,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Set up Git
+      - name: Check for master-jdk21 branch
+        id: check-branch
         run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-      
-      - name: Check if master-jdk21 branch exists
-        id: check_branch
-        run: |
+          git fetch origin || true
           if git ls-remote --heads origin master-jdk21 | grep master-jdk21; then
             echo "Branch exists"
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -30,29 +25,37 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
       
-      - name: Create master-jdk21 branch if it does not exist
-        if: steps.check_branch.outputs.exists == 'false'
+      - name: Create master-jdk21 branch if needed
+        if: steps.check-branch.outputs.exists == 'false'
         run: |
           git checkout -b master-jdk21
           git push origin master-jdk21
       
-      - name: Create or update sync branch
+      - name: Create/update sync branch
         run: |
-          git fetch origin
           git checkout -b sync-branch
-          git reset --hard origin/master
           git push -f origin sync-branch:sync/master-to-master-jdk21
       
-      - name: Create Pull Request
+      - name: Create Pull Request using curl
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_EXISTS=$(gh pr list --base master-jdk21 --head sync/master-to-master-jdk21 --json number | jq length)
+          # Check if PR already exists
+          PR_CHECK=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pulls?head=$GITHUB_REPOSITORY_OWNER:sync/master-to-master-jdk21&base=master-jdk21&state=open")
           
-          if [ "$PR_EXISTS" -eq "0" ]; then
-            gh pr create --base master-jdk21 --head sync/master-to-master-jdk21 \
-              --title "Sync: master to master-jdk21" \
-              --body "This is an automated pull request to sync the latest changes from master to master-jdk21."
+          if [[ $(echo $PR_CHECK | jq length) -eq 0 ]]; then
+            # Create PR
+            curl -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/$GITHUB_REPOSITORY/pulls \
+              -d '{
+                "title": "Sync: master to master-jdk21",
+                "body": "Automated PR to sync changes from master to master-jdk21",
+                "head": "sync/master-to-master-jdk21",
+                "base": "master-jdk21"
+              }'
             echo "Pull request created"
           else
             echo "Pull request already exists"
