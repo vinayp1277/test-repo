@@ -6,9 +6,9 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
-    # Specify which dependency updates should trigger security-update PRs
-    # when security vulnerabilities are detected 
-    security-updates: true
+    # Enable security updates
+    # This is the correct setting for enabling security updates
+    vulnerability-alerts: true
     # Assign the pull requests to specific reviewers
     assignees:
       - "vinayp1277"
