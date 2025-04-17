@@ -1,0 +1,7 @@
+This file is created to test the updated sync workflow.
+The workflow should detect changes between master and master-jdk21 branches and create a PR automatically.
+
+Testing:
+- Proper checkout of master branch
+- Diff detection between branches
+- PR creation with peter-evans/create-pull-request action
