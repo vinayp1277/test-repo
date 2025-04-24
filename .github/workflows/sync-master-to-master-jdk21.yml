@@ -53,19 +53,23 @@ jobs:
           fi
           
       - name: Create PR
-        if: steps.diffcheck.outputs.sync_required == 'true' && steps.prcheck.outputs.exists == 'false'
+        if: steps.prcheck.outputs.exists == 'false'
         id: prcreate
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          pr_url=$(gh pr create \
+          pr_output=$(gh pr create \
             --head master \
             --base master-jdk21 \
             --title "Sync: master to master-jdk21" \
-            --body "Automated PR to sync latest changes from master to master-jdk21." \
-            --json url -q '.url')
-          echo "url=$pr_url" >> $GITHUB_OUTPUT
+            --body "Automated PR to sync latest changes from master to master-jdk21.")
+      
+          echo "PR Output: $pr_output"
           
+         
+          pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
+          echo "url=$pr_url" >> $GITHUB_OUTPUT
+                
    
           
       - name: Comment on existing PR
