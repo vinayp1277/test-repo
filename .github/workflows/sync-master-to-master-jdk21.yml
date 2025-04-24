@@ -8,16 +8,18 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout master
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
+          
+      - name: Setup GitHub CLI
+        uses: cli/cli-action@v2
+        
       - name: Fetch master-jdk21
         run: git fetch origin master-jdk21
-
+        
       - name: Check for diff
         id: diffcheck
         run: |
@@ -28,12 +30,12 @@ jobs:
             echo "Sync needed"
             echo "sync_required=true" >> $GITHUB_OUTPUT
           fi
-
+          
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: prcheck
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pr_url=$(gh pr list --base master-jdk21 --head master --state open --json url -q '.[0].url')
           if [ -n "$pr_url" ]; then
@@ -44,23 +46,28 @@ jobs:
             echo "No PR exists"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
+          
       - name: Create PR
-        if: steps.prcheck.outputs.exists == 'false'
+        if: steps.diffcheck.outputs.sync_required == 'true' && steps.prcheck.outputs.exists == 'false'
+        id: prcreate
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr create \
+          pr_url=$(gh pr create \
             --head master \
             --base master-jdk21 \
             --title "Sync: master to master-jdk21" \
-            --body "Automated PR to sync latest changes from master to master-jdk21."
+            --body "Automated PR to sync latest changes from master to master-jdk21." \
+            --json url -q '.url')
+          echo "url=$pr_url" >> $GITHUB_OUTPUT
+          
 
-      - name: Comment on existing PR (optional)
-        if: steps.prcheck.outputs.exists == 'true'
+          
+      - name: Comment on existing PR
+        if: steps.diffcheck.outputs.sync_required == 'true' && steps.prcheck.outputs.exists == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr comment "${{ steps.prcheck.outputs.url }}" \
             --body "New commit pushed to master. PR already open — sync continues."
-
+            
