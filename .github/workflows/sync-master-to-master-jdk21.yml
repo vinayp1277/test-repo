@@ -15,7 +15,12 @@ jobs:
           fetch-depth: 0
           
       - name: Setup GitHub CLI
-        uses: cli/cli-action@v2
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh -y
+          gh --version
         
       - name: Fetch master-jdk21
         run: git fetch origin master-jdk21
@@ -35,7 +40,7 @@ jobs:
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: prcheck
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           pr_url=$(gh pr list --base master-jdk21 --head master --state open --json url -q '.[0].url')
           if [ -n "$pr_url" ]; then
@@ -51,7 +56,7 @@ jobs:
         if: steps.diffcheck.outputs.sync_required == 'true' && steps.prcheck.outputs.exists == 'false'
         id: prcreate
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           pr_url=$(gh pr create \
             --head master \
@@ -61,13 +66,14 @@ jobs:
             --json url -q '.url')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
           
-
+   
           
       - name: Comment on existing PR
         if: steps.diffcheck.outputs.sync_required == 'true' && steps.prcheck.outputs.exists == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           gh pr comment "${{ steps.prcheck.outputs.url }}" \
             --body "New commit pushed to master. PR already open — sync continues."
             
+   
