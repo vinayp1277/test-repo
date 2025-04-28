@@ -1,4 +1,4 @@
-name: Sync master to master-jdk21
+name: Sync master to master-jdk21 (with dynamic tagging, slack alert, commit counts)
 
 on:
   push:
@@ -30,6 +30,7 @@ jobs:
       - name: Collect GitHub usernames or fallback emails with commit counts
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: collectauthors
+        shell: bash  # <-- important for declare -A associative arrays
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
@@ -53,17 +54,20 @@ jobs:
             USER_COMMIT_COUNTS["$user_or_email"]=$(( USER_COMMIT_COUNTS["$user_or_email"] + 1 ))
           done
 
-          # Create output: - 🔥 user (n commits)
+          # Create bullet-pointed list: - 🔥 user (n commits)
           MENTION_LIST=""
           for user in "${!USER_COMMIT_COUNTS[@]}"; do
             count=${USER_COMMIT_COUNTS[$user]}
             MENTION_LIST="${MENTION_LIST}\n- 🔥 ${user} (${count} commit(s))"
           done
 
-          # Sort nicely
+          # Sort for neatness
           MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
 
-          echo "author_mentions=$MENTION_LIST" >> $GITHUB_OUTPUT
+          # Correct multiline output handling for GitHub Actions
+          echo "author_mentions<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$MENTION_LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
@@ -100,10 +104,10 @@ jobs:
         run: |
           if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
             COMMENT_BODY="### 🚀 Committers Requested for Review
-  
-            ${{ steps.collectauthors.outputs.author_mentions }}
-            
-            Please review and merge. 🙏"
+
+              ${{ steps.collectauthors.outputs.author_mentions }}
+              
+              Please review and merge. 🙏"
             gh pr comment "${{ steps.prcreate.outputs.url }}" --body "$COMMENT_BODY"
           fi
 
@@ -114,10 +118,10 @@ jobs:
         run: |
           if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
             COMMENT_BODY="### 🔄 New commits pushed to open PR
-          
-            ${{ steps.collectauthors.outputs.author_mentions }}
-            
-            Please review and merge. 🙏"
+
+              ${{ steps.collectauthors.outputs.author_mentions }}
+              
+              Please review and merge. 🙏"
             gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
           fi
 
