@@ -26,43 +26,57 @@ jobs:
             echo "sync_required=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Collect GitHub usernames or fallback emails with commit counts
+      - name: Collect GitHub usernames with emails and commit counts
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: collectauthors
-        shell: bash  
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           declare -A USER_COMMIT_COUNTS
-
+          declare -A USER_DISPLAY_NAME
+      
           COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
-
+      
           for sha in $COMMITS; do
-              email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
-              if [ -n "$email" ]; then
-                user_or_email="$email"
-              else
-                continue
-              fi
+            login=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
+            email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
+      
+            if [ -n "$login" ]; then
+              user_key="@$login"
+            elif [ -n "$email" ]; then
+              user_key="$email"
+            else
+              continue
+            fi
+      
            
-
-            USER_COMMIT_COUNTS["$user_or_email"]=$(( USER_COMMIT_COUNTS["$user_or_email"] + 1 ))
+            if [ -n "$login" ] && [ -n "$email" ]; then
+              display_name="@$login ($email)"
+            elif [ -n "$login" ]; then
+              display_name="@$login"
+            else
+              display_name="$email"
+            fi
+      
+            USER_DISPLAY_NAME["$user_key"]="$display_name"
+            USER_COMMIT_COUNTS["$user_key"]=$(( USER_COMMIT_COUNTS["$user_key"] + 1 ))
           done
-
-         
+      
+       
           MENTION_LIST=""
           for user in "${!USER_COMMIT_COUNTS[@]}"; do
             count=${USER_COMMIT_COUNTS[$user]}
-            MENTION_LIST="${MENTION_LIST}\n- 🔥 ${user} (${count} commit(s))"
+            MENTION_LIST="${MENTION_LIST}\n- 🔥 ${USER_DISPLAY_NAME[$user]} (${count} commit(s))"
           done
-
-        
+      
           MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
-
-          # Correct multiline output handling for GitHub Actions
+      
+         
           echo "author_mentions<<EOF" >> $GITHUB_OUTPUT
           echo -e "$MENTION_LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
 
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
