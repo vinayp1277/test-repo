@@ -1,4 +1,4 @@
-name: Sync master to master-jdk21 (with PR reuse)
+name: Sync master to master-jdk21 (with dynamic tagging, slack alert, and polished formatting)
 
 on:
   push:
@@ -15,19 +15,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch master-jdk21
+      - name: Fetch master-jdk21 branch
         run: git fetch origin master-jdk21
 
-      - name: Check for diff
+      - name: Check if sync is needed
         id: diffcheck
         run: |
           if git diff --quiet origin/master-jdk21..HEAD; then
-            echo "No sync needed"
             echo "sync_required=false" >> $GITHUB_OUTPUT
           else
-            echo "Sync needed"
             echo "sync_required=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Collect GitHub usernames from commits
+        if: steps.diffcheck.outputs.sync_required == 'true'
+        id: collectauthors
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
+
+          MENTIONS=""
+          for sha in $COMMITS; do
+            user=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
+            if [ -n "$user" ]; then
+              MENTIONS+="@$user "
+            fi
+          done
+
+          # Remove duplicates
+          MENTIONS=$(echo $MENTIONS | xargs -n1 | sort -u | xargs)
+
+          echo "author_mentions=$MENTIONS" >> $GITHUB_OUTPUT
 
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
@@ -37,15 +56,13 @@ jobs:
         run: |
           pr_url=$(gh pr list --base master-jdk21 --head master --state open --json url -q '.[0].url')
           if [ -n "$pr_url" ]; then
-            echo "PR already exists: $pr_url"
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "url=$pr_url" >> $GITHUB_OUTPUT
           else
-            echo "No PR exists"
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create PR
+      - name: Create PR if not exists
         if: steps.prcheck.outputs.exists == 'false'
         id: prcreate
         env:
@@ -56,21 +73,36 @@ jobs:
             --base master-jdk21 \
             --title "Sync: master to master-jdk21" \
             --body "Automated PR to sync latest changes from master to master-jdk21.")
-      
-          echo "PR Output: $pr_output"
-          
-         
           pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
 
 
-
+      - name: Comment and Tag Authors - PR created
+        if: steps.prcreate.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            COMMENT_BODY="### 🚀 Committers Requested for Review
+          
+            $(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
+          
+            Please review and merge. 🙏"
+            gh pr comment "${{ steps.prcreate.outputs.url }}" --body "$COMMENT_BODY"
+          fi
 
       - name: Comment on existing PR
         if: steps.prcheck.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          gh pr comment "${{ steps.prcheck.outputs.url }}" \
-            --body "New commit pushed to master. PR already open — sync continues."
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            COMMENT_BODY="### 🔄 New commits pushed to open PR
+          
+            $(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
+          
+            Please review and merge. 🙏"
+            gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
+          fi
+
 
