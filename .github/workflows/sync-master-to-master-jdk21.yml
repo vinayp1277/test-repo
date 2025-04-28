@@ -105,4 +105,23 @@ jobs:
             gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
           fi
 
+      - name: Send Slack notification via Sporty Alert - PR Created
+        if: steps.prcreate.outputs.url != ''
+        run: |
+          MESSAGE="🆕 PR Created: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21> \n\n Commit Authors: ${{ steps.collectauthors.outputs.author_emails }}"
+          curl -X POST -H 'Content-Type: application/json' \
+          --data "{\"message\":\"${MESSAGE}\",\"channel\":\"common-tools_master-to-masterjdk21_sync\"}" \
+          "https://sporty-alert-misc.on.sportybet2.com/exchange/message?type=slack&channel=common-tools_master-to-masterjdk21_sync&mentions=true"
+
+      - name: Send Slack notification via Sporty Alert - Commit pushed to open PR
+        if: steps.prcheck.outputs.exists == 'true'
+        run: |
+          MESSAGE="🔄 New commit pushed to master. PR already open: <${{ steps.prcheck.outputs.url }}|View PR> \n\n Commit Authors: ${{ steps.collectauthors.outputs.author_emails }}"
+          curl -X POST -H 'Content-Type: application/json' \
+          --data "{\"message\":\"${MESSAGE}\",\"channel\":\"common-tools_master-to-masterjdk21_sync\"}" \
+          "https://sporty-alert-misc.on.sportybet2.com/exchange/message?type=slack&channel=common-tools_master-to-masterjdk21_sync&mentions=true"
+
+
+
+
 
