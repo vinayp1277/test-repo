@@ -1,12 +1,11 @@
-name: Sync master to master-jdk21
-
+name: Sync master to master-jdk21 (sync PR)
 on:
   push:
     branches:
       - master
 
 jobs:
-  sync-branches:
+  sync:
     runs-on: ubuntu-latest
 
     steps:
@@ -14,37 +13,149 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: master
 
-      - name: Fetch all remote branches
-        run: git fetch --all
+      - name: Fetch master-jdk21 branch
+        run: git fetch origin master-jdk21
 
-      - name: Check if master has changes compared to master-jdk21
+      - name: Check if sync is needed
         id: diffcheck
         run: |
-          git fetch origin master-jdk21
-          if git diff --quiet origin/master-jdk21...HEAD; then
-            echo "No changes to sync — exiting."
-            echo "skip=true" >> $GITHUB_OUTPUT
+          if git diff --quiet origin/master-jdk21..HEAD; then
+            echo "sync_required=false" >> $GITHUB_OUTPUT
           else
-            echo "Changes detected — proceeding with PR creation."
-            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "sync_required=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Exit early if no changes
-        if: steps.diffcheck.outputs.skip == 'true'
-        run: exit 0
+      - name: Collect GitHub usernames with emails and commit counts
+        if: steps.diffcheck.outputs.sync_required == 'true'
+        id: collectauthors
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          declare -A USER_COMMIT_COUNTS
+          declare -A USER_DISPLAY_NAME
+      
+          COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
+      
+          for sha in $COMMITS; do
+            login=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
+            email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
+      
+            if [ -n "$login" ]; then
+              user_key="@$login"
+            elif [ -n "$email" ]; then
+              user_key="$email"
+            else
+              continue
+            fi
+      
+           
+            if [ -n "$login" ] && [ -n "$email" ]; then
+              display_name="@$login ($email)"
+            elif [ -n "$login" ]; then
+              display_name="@$login"
+            else
+              display_name="$email"
+            fi
+      
+            USER_DISPLAY_NAME["$user_key"]="$display_name"
+            USER_COMMIT_COUNTS["$user_key"]=$(( USER_COMMIT_COUNTS["$user_key"] + 1 ))
+          done
+      
+       
+          MENTION_LIST=""
+          for user in "${!USER_COMMIT_COUNTS[@]}"; do
+            count=${USER_COMMIT_COUNTS[$user]}
+            MENTION_LIST="${MENTION_LIST}\n- 🔥 ${USER_DISPLAY_NAME[$user]} (${count} commit(s))"
+          done
+      
+          MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
+      
+         
+          echo "author_mentions<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$MENTION_LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Create Pull Request to merge master into master-jdk21
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GH_TOKEN }}
-          branch: sync/master-to-master-jdk21
-          base: master-jdk21
-          title: 'Sync: master to master-jdk21'
-          body: |
-            This is an automated pull request to sync the latest changes from `master` into `master-jdk21`.
 
-            > Created by GitHub Actions via [peter-evans/create-pull-request](https://github.com/peter-evans/create-pull-request)
-          commit-message: 'chore: sync master into master-jdk21'
-          delete-branch: false
+      - name: Check if PR already exists
+        if: steps.diffcheck.outputs.sync_required == 'true'
+        id: prcheck
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          pr_url=$(gh pr list --base master-jdk21 --head master --state open --json url -q '.[0].url')
+          if [ -n "$pr_url" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "url=$pr_url" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR if not exists
+        if: steps.prcheck.outputs.exists == 'false'
+        id: prcreate
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          pr_output=$(gh pr create \
+            --head master \
+            --base master-jdk21 \
+            --title "Sync: master to master-jdk21" \
+            --body "Automated PR to sync latest changes from master to master-jdk21.")
+          pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
+          echo "url=$pr_url" >> $GITHUB_OUTPUT
+
+      - name: Comment and Tag Authors - PR created
+        if: steps.prcreate.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            COMMENT_BODY="### 🚀 Committers Requested for Review
+
+              ${{ steps.collectauthors.outputs.author_mentions }}
+              
+              Please review and merge. 🙏"
+            gh pr comment "${{ steps.prcreate.outputs.url }}" --body "$COMMENT_BODY"
+          fi
+
+      - name: Comment on existing PR
+        if: steps.prcheck.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            COMMENT_BODY="### 🔄 New commits pushed to open PR
+
+              ${{ steps.collectauthors.outputs.author_mentions }}
+              
+              Please review and merge. 🙏"
+            gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
+          fi
+
+      - name: Send Slack notification - PR Created
+        if: steps.prcreate.outputs.url != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{
+                \"text\": \"🆕 *PR Created*: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
+              }" \
+              "$SLACK_WEBHOOK_URL"
+          fi
+
+      - name: Send Slack notification - Commit pushed to open PR
+        if: steps.prcheck.outputs.exists == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{
+                \"text\": \"🔄 *New commit pushed to master*. PR open: <${{ steps.prcheck.outputs.url }}|View PR>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
+              }" \
+              "$SLACK_WEBHOOK_URL"
+          fi
