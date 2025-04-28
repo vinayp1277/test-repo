@@ -1,4 +1,4 @@
-name: Sync master to master-jdk21 
+name: Sync master to master-jdk21 (sync PR)
 on:
   push:
     branches:
