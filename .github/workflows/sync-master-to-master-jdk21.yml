@@ -44,7 +44,7 @@ jobs:
               else
                 continue
               fi
-            fi
+           
 
             USER_COMMIT_COUNTS["$user_or_email"]=$(( USER_COMMIT_COUNTS["$user_or_email"] + 1 ))
           done
