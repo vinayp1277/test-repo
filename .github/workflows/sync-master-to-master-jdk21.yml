@@ -29,7 +29,7 @@ jobs:
       - name: Collect GitHub usernames or fallback emails with commit counts
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: collectauthors
-        shell: bash  # <-- important for declare -A associative arrays
+        shell: bash  
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
@@ -38,10 +38,6 @@ jobs:
           COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
 
           for sha in $COMMITS; do
-            login=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
-            if [ -n "$login" ]; then
-              user_or_email="@$login"
-            else
               email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
               if [ -n "$email" ]; then
                 user_or_email="$email"
