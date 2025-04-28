@@ -1,5 +1,4 @@
-name: Sync master to master-jdk21 (with dynamic tagging, slack alert, commit counts)
-
+name: Sync master to master-jdk21 
 on:
   push:
     branches:
@@ -54,14 +53,14 @@ jobs:
             USER_COMMIT_COUNTS["$user_or_email"]=$(( USER_COMMIT_COUNTS["$user_or_email"] + 1 ))
           done
 
-          # Create bullet-pointed list: - 🔥 user (n commits)
+         
           MENTION_LIST=""
           for user in "${!USER_COMMIT_COUNTS[@]}"; do
             count=${USER_COMMIT_COUNTS[$user]}
             MENTION_LIST="${MENTION_LIST}\n- 🔥 ${user} (${count} commit(s))"
           done
 
-          # Sort for neatness
+        
           MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
 
           # Correct multiline output handling for GitHub Actions
