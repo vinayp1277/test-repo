@@ -1,4 +1,4 @@
-name: Sync master to master-jdk21 (with dynamic tagging, slack alert, and polished formatting)
+name: Sync master to master-jdk21
 
 on:
   push:
@@ -27,26 +27,43 @@ jobs:
             echo "sync_required=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Collect GitHub usernames from commits
+      - name: Collect GitHub usernames or fallback emails with commit counts
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: collectauthors
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          declare -A USER_COMMIT_COUNTS
+
           COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
 
-          MENTIONS=""
           for sha in $COMMITS; do
-            user=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
-            if [ -n "$user" ]; then
-              MENTIONS+="@$user "
+            login=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
+            if [ -n "$login" ]; then
+              user_or_email="@$login"
+            else
+              email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
+              if [ -n "$email" ]; then
+                user_or_email="$email"
+              else
+                continue
+              fi
             fi
+
+            USER_COMMIT_COUNTS["$user_or_email"]=$(( USER_COMMIT_COUNTS["$user_or_email"] + 1 ))
           done
 
-          # Remove duplicates
-          MENTIONS=$(echo $MENTIONS | xargs -n1 | sort -u | xargs)
+          # Create output: - 🔥 user (n commits)
+          MENTION_LIST=""
+          for user in "${!USER_COMMIT_COUNTS[@]}"; do
+            count=${USER_COMMIT_COUNTS[$user]}
+            MENTION_LIST="${MENTION_LIST}\n- 🔥 ${user} (${count} commit(s))"
+          done
 
-          echo "author_mentions=$MENTIONS" >> $GITHUB_OUTPUT
+          # Sort nicely
+          MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
+
+          echo "author_mentions=$MENTION_LIST" >> $GITHUB_OUTPUT
 
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
@@ -76,7 +93,6 @@ jobs:
           pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
 
-
       - name: Comment and Tag Authors - PR created
         if: steps.prcreate.outputs.url != ''
         env:
@@ -84,9 +100,9 @@ jobs:
         run: |
           if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
             COMMENT_BODY="### 🚀 Committers Requested for Review
-          
-            $(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
-          
+  
+            ${{ steps.collectauthors.outputs.author_mentions }}
+            
             Please review and merge. 🙏"
             gh pr comment "${{ steps.prcreate.outputs.url }}" --body "$COMMENT_BODY"
           fi
@@ -99,29 +115,34 @@ jobs:
           if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
             COMMENT_BODY="### 🔄 New commits pushed to open PR
           
-            $(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
-          
+            ${{ steps.collectauthors.outputs.author_mentions }}
+            
             Please review and merge. 🙏"
             gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
           fi
 
-      - name: Send Slack notification via Sporty Alert - PR Created
+      - name: Send Slack notification - PR Created
         if: steps.prcreate.outputs.url != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          MESSAGE="🆕 PR Created: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21> \n\n Commit Authors: ${{ steps.collectauthors.outputs.author_emails }}"
-          curl -X POST -H 'Content-Type: application/json' \
-          --data "{\"message\":\"${MESSAGE}\",\"channel\":\"common-tools_master-to-masterjdk21_sync\"}" \
-          "https://sporty-alert-misc.on.sportybet2.com/exchange/message?type=slack&channel=common-tools_master-to-masterjdk21_sync&mentions=true"
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{
+                \"text\": \"🆕 *PR Created*: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
+              }" \
+              "$SLACK_WEBHOOK_URL"
+          fi
 
-      - name: Send Slack notification via Sporty Alert - Commit pushed to open PR
+      - name: Send Slack notification - Commit pushed to open PR
         if: steps.prcheck.outputs.exists == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          MESSAGE="🔄 New commit pushed to master. PR already open: <${{ steps.prcheck.outputs.url }}|View PR> \n\n Commit Authors: ${{ steps.collectauthors.outputs.author_emails }}"
-          curl -X POST -H 'Content-Type: application/json' \
-          --data "{\"message\":\"${MESSAGE}\",\"channel\":\"common-tools_master-to-masterjdk21_sync\"}" \
-          "https://sporty-alert-misc.on.sportybet2.com/exchange/message?type=slack&channel=common-tools_master-to-masterjdk21_sync&mentions=true"
-
-
-
-
-
+          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
+            curl -X POST -H 'Content-Type: application/json' \
+              --data "{
+                \"text\": \"🔄 *New commit pushed to master*. PR open: <${{ steps.prcheck.outputs.url }}|View PR>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
+              }" \
+              "$SLACK_WEBHOOK_URL"
+          fi
