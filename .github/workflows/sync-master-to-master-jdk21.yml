@@ -76,31 +76,6 @@ jobs:
           pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
 
-      - name: Define Slack Notification Function
-        run: |
-          send_sporty_alert() {
-            local message="$1"
-            curl -X POST -H 'Content-Type: application/json' \
-              --data "{\"message\":\"${message}\",\"channel\":\"common-tools_master-to-masterjdk21_sync\"}" \
-              "https://sporty-alert-misc.on.sportybet2.com/exchange/message?type=slack&channel=common-tools_master-to-masterjdk21_sync&mentions=true"
-          }
-          echo "Slack function ready."
-
-      - name: Slack notify - PR created
-        if: steps.prcreate.outputs.url != ''
-        run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            MENTION_LIST=$(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
-            COMMITTERS_SECTION="*Committers:*\n$MENTION_LIST"
-          else
-            COMMITTERS_SECTION=""
-          fi
-
-          MESSAGE="🆕 *PR Created*: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21>
-
-          $COMMITTERS_SECTION
-          "
-            send_sporty_alert "$MESSAGE"
 
       - name: Comment and Tag Authors - PR created
         if: steps.prcreate.outputs.url != ''
@@ -130,18 +105,4 @@ jobs:
             gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
           fi
 
-      - name: Slack notify - Commit pushed to open PR
-        if: steps.prcheck.outputs.exists == 'true'
-        run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            MENTION_LIST=$(for user in ${{ steps.collectauthors.outputs.author_mentions }}; do echo "- $user"; done)
-            COMMITTERS_SECTION="*Committers:*\n$MENTION_LIST"
-          else
-            COMMITTERS_SECTION=""
-          fi
-          
-          MESSAGE="🔄 *New commit pushed to master*. PR already open: <${{ steps.prcheck.outputs.url }}|View PR>
-          
-          $COMMITTERS_SECTION
-          "
-            send_sporty_alert "$MESSAGE"
+
