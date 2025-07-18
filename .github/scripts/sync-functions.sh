@@ -3,23 +3,6 @@
 
 set -e
 
-load_excluded_commits() {
-    local arr_name=$1
-    if [ -f .github/.commitignore ]; then
-        while IFS=' ' read -r sha rest || [ -n "$sha" ]; do
-            [[ "$sha" =~ ^#.*$ ]] && continue
-            [[ -z "$sha" ]] && continue
-            eval "${arr_name}+=('$sha')"
-        done < .github/.commitignore
-    fi
-}
-
-is_excluded_commit() {
-    local sha=$1
-    local short_sha=${sha:0:8}
-    [[ " ${EXCLUDED_COMMITS[@]} " =~ " ${short_sha} " ]]
-}
-
 has_non_jenkins_files() {
     local sha=$1
     local files_changed

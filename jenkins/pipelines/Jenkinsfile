@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    
+    environment {
+        MAVEN_HOME = tool 'Maven-3.8.1'
+        JAVA_HOME = tool 'JDK-11'
+        PATH = "${MAVEN_HOME}/bin:${JAVA_HOME}/bin:${PATH}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+            post {
+                always {
+                    publishTestResults testResultsPattern: 'target/surefire-reports/*.xml'
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                sh 'mvn package'
+            }
+        }
+        
+        stage('Deploy') {
+            when {
+                branch 'master'
+            }
+            steps {
+                sh 'echo "Deploying to production..."'
+                // deployment steps here
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            slackSend channel: '#deployments', 
+                     message: "Build successful: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
+        }
+        failure {
+            slackSend channel: '#deployments', 
+                     message: "Build failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}"
+        }
+    }
+}
+EOF < /dev/null

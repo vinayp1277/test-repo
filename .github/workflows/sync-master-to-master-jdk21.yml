@@ -28,20 +28,11 @@ jobs:
           # Source shared functions
           source .github/scripts/sync-functions.sh
           
-          # Load excluded commits
-          EXCLUDED_COMMITS=()
-          load_excluded_commits EXCLUDED_COMMITS
-          
           # Check commits
           COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
           HAS_NON_JENKINS_COMMITS=false
           
           for sha in $COMMITS; do
-              # Skip excluded commits
-              if is_excluded_commit "$sha"; then
-                  continue
-              fi
-              
               # Check if commit has non-jenkins files
               if has_non_jenkins_files "$sha"; then
                   HAS_NON_JENKINS_COMMITS=true
@@ -64,19 +55,10 @@ jobs:
           declare -A USER_REVERT_COUNTS
           declare -A USER_DISPLAY_NAME
           
-          # Load excluded commits
-          EXCLUDED_COMMITS=()
-          load_excluded_commits EXCLUDED_COMMITS
-          
           # Process commits
           COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
           
           for sha in $COMMITS; do
-              # Skip excluded commits
-              if is_excluded_commit "$sha"; then
-                  continue
-              fi
-              
               # Skip jenkins-only commits
               if ! has_non_jenkins_files "$sha"; then
                   continue
