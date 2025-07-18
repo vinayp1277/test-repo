@@ -131,17 +131,27 @@ jobs:
         id: commitignore_check
         run: |
           # Check if .commitignore file was modified in recent commits
-          COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
+          # Use the same commit range as the sync check
+          if git rev-parse --verify origin/${{ env.TARGET_BRANCH }} >/dev/null 2>&1; then
+              COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
+          else
+              # If target branch doesn't exist, check last 5 commits
+              COMMITS=$(git log --pretty=format:'%H' -5)
+          fi
+          
           COMMITIGNORE_UPDATED=false
           
           for sha in $COMMITS; do
+              echo "Checking commit $sha for .commitignore changes..."
               if git diff-tree --no-commit-id --name-only -r $sha | grep -q "^\.github/\.commitignore$"; then
+                  echo "Found .commitignore update in commit $sha"
                   COMMITIGNORE_UPDATED=true
                   break
               fi
           done
           
           echo "commitignore_updated=$COMMITIGNORE_UPDATED" >> $GITHUB_OUTPUT
+          echo "Commitignore updated: $COMMITIGNORE_UPDATED"
 
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
