@@ -1,0 +1,6 @@
+# Commit ignore file for sync-branches workflow
+# Add commit SHAs (short or full) to exclude from sync
+# Lines starting with # are ignored
+# Example:
+# abc1234f
+# def5678a
