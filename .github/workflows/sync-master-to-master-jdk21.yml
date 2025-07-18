@@ -126,6 +126,23 @@ jobs:
           echo -e "$MENTION_LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Check if commitignore was updated
+        if: steps.diffcheck.outputs.sync_required == 'true'
+        id: commitignore_check
+        run: |
+          # Check if .commitignore file was modified in recent commits
+          COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
+          COMMITIGNORE_UPDATED=false
+          
+          for sha in $COMMITS; do
+              if git diff-tree --no-commit-id --name-only -r $sha | grep -q "^\.github/\.commitignore$"; then
+                  COMMITIGNORE_UPDATED=true
+                  break
+              fi
+          done
+          
+          echo "commitignore_updated=$COMMITIGNORE_UPDATED" >> $GITHUB_OUTPUT
+
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: prcheck
@@ -138,15 +155,34 @@ jobs:
               echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create PR if not exists
-        if: steps.prcheck.outputs.exists == 'false' && steps.diffcheck.outputs.sync_required == 'true'
+      - name: Close existing PR if commitignore was updated
+        if: steps.prcheck.outputs.exists == 'true' && steps.commitignore_check.outputs.commitignore_updated == 'true'
+        run: |
+          echo "Commitignore file was updated, closing existing sync PR to recreate with updated exclusions"
+          gh pr close "${{ steps.prcheck.outputs.url }}" --comment "Closing PR due to commitignore updates. A new sync PR will be created with updated exclusions."
+          
+          # Update the prcheck output to indicate no PR exists
+          echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: Create PR if not exists or was closed
+        if: (steps.prcheck.outputs.exists == 'false' || steps.commitignore_check.outputs.commitignore_updated == 'true') && steps.diffcheck.outputs.sync_required == 'true'
         id: prcreate
         run: |
+          if [ "${{ steps.commitignore_check.outputs.commitignore_updated }}" = "true" ]; then
+              PR_TITLE="Sync: ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }} (Updated with exclusions)"
+              PR_BODY="Automated PR to sync latest changes from ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}.
+
+This PR was recreated due to commitignore updates to ensure proper exclusions are applied."
+          else
+              PR_TITLE="Sync: ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}"
+              PR_BODY="Automated PR to sync latest changes from ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}."
+          fi
+          
           pr_output=$(gh pr create \
               --head ${{ env.SOURCE_BRANCH }} \
               --base ${{ env.TARGET_BRANCH }} \
-              --title "Sync: ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}" \
-              --body "Automated PR to sync latest changes from ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}.")
+              --title "$PR_TITLE" \
+              --body "$PR_BODY")
           pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
 
