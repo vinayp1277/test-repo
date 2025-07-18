@@ -157,18 +157,17 @@ jobs:
 
       - name: Close existing PR if commitignore was updated
         if: steps.prcheck.outputs.exists == 'true' && steps.commitignore_check.outputs.commitignore_updated == 'true'
+        id: prclose
         run: |
           echo "Commitignore file was updated, closing existing sync PR to recreate with updated exclusions"
           gh pr close "${{ steps.prcheck.outputs.url }}" --comment "Closing PR due to commitignore updates. A new sync PR will be created with updated exclusions."
-          
-          # Update the prcheck output to indicate no PR exists
-          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "closed=true" >> $GITHUB_OUTPUT
 
       - name: Create PR if not exists or was closed
-        if: (steps.prcheck.outputs.exists == 'false' || steps.commitignore_check.outputs.commitignore_updated == 'true') && steps.diffcheck.outputs.sync_required == 'true'
+        if: (steps.prcheck.outputs.exists == 'false' || steps.prclose.outputs.closed == 'true') && steps.diffcheck.outputs.sync_required == 'true'
         id: prcreate
         run: |
-          if [ "${{ steps.commitignore_check.outputs.commitignore_updated }}" = "true" ]; then
+          if [ "${{ steps.prclose.outputs.closed }}" = "true" ]; then
               PR_TITLE="Sync: ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }} (Updated with exclusions)"
               PR_BODY="Automated PR to sync latest changes from ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}.
 
