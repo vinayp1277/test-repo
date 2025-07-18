@@ -12,6 +12,7 @@ a33cf6d  # Add commit 4b000e4 to commitignore to test exclusion functionality
 # More commits to exclude from sync
 642de01  # Fix workflow logic for PR close/recreate functionality
 19a9e57  # Close and recreate sync PR when commitignore is updated
+166c7f2  # Test commit that should be ignored
 
 # This update should trigger PR close/recreate functionality
 # Testing the enhanced workflow detection logic
