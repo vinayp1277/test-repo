@@ -4,6 +4,11 @@ on:
     branches:
       - master
 
+env:
+  SOURCE_BRANCH: master
+  TARGET_BRANCH: master-jdk21
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -14,148 +19,178 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch master-jdk21 branch
-        run: git fetch origin master-jdk21
+      - name: Fetch target branch
+        run: git fetch origin ${{ env.TARGET_BRANCH }}
 
       - name: Check if sync is needed
         id: diffcheck
         run: |
-          if git diff --quiet origin/master-jdk21..HEAD; then
-            echo "sync_required=false" >> $GITHUB_OUTPUT
-          else
-            echo "sync_required=true" >> $GITHUB_OUTPUT
-          fi
+          # Source shared functions
+          source .github/scripts/sync-functions.sh
+          
+          # Load excluded commits
+          EXCLUDED_COMMITS=()
+          load_excluded_commits EXCLUDED_COMMITS
+          
+          # Check commits
+          COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
+          HAS_NON_JENKINS_COMMITS=false
+          
+          for sha in $COMMITS; do
+              # Skip excluded commits
+              if is_excluded_commit "$sha"; then
+                  continue
+              fi
+              
+              # Check if commit has non-jenkins files
+              if has_non_jenkins_files "$sha"; then
+                  HAS_NON_JENKINS_COMMITS=true
+                  break
+              fi
+          done
+          
+          echo "sync_required=$HAS_NON_JENKINS_COMMITS" >> $GITHUB_OUTPUT
 
       - name: Collect GitHub usernames with emails and commit counts
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: collectauthors
         shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          # Source shared functions
+          source .github/scripts/sync-functions.sh
+          
+          # Initialize
           declare -A USER_COMMIT_COUNTS
+          declare -A USER_REVERT_COUNTS
           declare -A USER_DISPLAY_NAME
-      
-          COMMITS=$(git log --pretty=format:'%H' origin/master-jdk21..HEAD)
-      
+          
+          # Load excluded commits
+          EXCLUDED_COMMITS=()
+          load_excluded_commits EXCLUDED_COMMITS
+          
+          # Process commits
+          COMMITS=$(git log --pretty=format:'%H' origin/${{ env.TARGET_BRANCH }}..HEAD)
+          
           for sha in $COMMITS; do
-            login=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.author.login' || true)
-            email=$(gh api repos/${{ github.repository }}/commits/$sha --jq '.commit.author.email' || true)
-      
-            if [ -n "$login" ]; then
-              user_key="@$login"
-            elif [ -n "$email" ]; then
-              user_key="$email"
-            else
-              continue
-            fi
-      
-           
-            if [ -n "$login" ] && [ -n "$email" ]; then
-              display_name="@$login ($email)"
-            elif [ -n "$login" ]; then
-              display_name="@$login"
-            else
-              display_name="$email"
-            fi
-      
-            USER_DISPLAY_NAME["$user_key"]="$display_name"
-            USER_COMMIT_COUNTS["$user_key"]=$(( USER_COMMIT_COUNTS["$user_key"] + 1 ))
+              # Skip excluded commits
+              if is_excluded_commit "$sha"; then
+                  continue
+              fi
+              
+              # Skip jenkins-only commits
+              if ! has_non_jenkins_files "$sha"; then
+                  continue
+              fi
+              
+              # Get user info
+              user_info=$(get_user_info "$sha" "${{ github.repository }}")
+              if [ -z "$user_info" ]; then
+                  continue
+              fi
+              
+              IFS='|' read -r user_key email <<< "$user_info"
+              
+              # Create display name
+              if [[ "$user_key" =~ ^@ ]] && [ -n "$email" ] && [ "$email" != "$user_key" ]; then
+                  display_name="$user_key ($email)"
+              else
+                  display_name="$user_key"
+              fi
+              
+              # Count commits
+              USER_DISPLAY_NAME["$user_key"]="$display_name"
+              USER_COMMIT_COUNTS["$user_key"]=$(( ${USER_COMMIT_COUNTS["$user_key"]:-0} + 1 ))
+              
+              # Count reverts
+              if is_revert_commit "$sha"; then
+                  USER_REVERT_COUNTS["$user_key"]=$(( ${USER_REVERT_COUNTS["$user_key"]:-0} + 1 ))
+              fi
           done
-      
-       
+          
+          # Generate mention list
           MENTION_LIST=""
           for user in "${!USER_COMMIT_COUNTS[@]}"; do
-            count=${USER_COMMIT_COUNTS[$user]}
-            MENTION_LIST="${MENTION_LIST}\n- 🔥 ${USER_DISPLAY_NAME[$user]} (${count} commit(s))"
+              count=${USER_COMMIT_COUNTS[$user]}
+              revert_count=${USER_REVERT_COUNTS[$user]:-0}
+              
+              if [ "$revert_count" -gt 0 ]; then
+                  MENTION_LIST="${MENTION_LIST}\n-  ${USER_DISPLAY_NAME[$user]} (${count} commit(s), ⚠️ ${revert_count} revert(s))"
+              else
+                  MENTION_LIST="${MENTION_LIST}\n-  ${USER_DISPLAY_NAME[$user]} (${count} commit(s))"
+              fi
           done
-      
+          
           MENTION_LIST=$(echo -e "$MENTION_LIST" | sort)
-      
-         
+          
           echo "author_mentions<<EOF" >> $GITHUB_OUTPUT
           echo -e "$MENTION_LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-
       - name: Check if PR already exists
         if: steps.diffcheck.outputs.sync_required == 'true'
         id: prcheck
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
-          pr_url=$(gh pr list --base master-jdk21 --head master --state open --json url -q '.[0].url')
+          pr_url=$(gh pr list --base ${{ env.TARGET_BRANCH }} --head ${{ env.SOURCE_BRANCH }} --state open --json url -q '.[0].url')
           if [ -n "$pr_url" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "url=$pr_url" >> $GITHUB_OUTPUT
+              echo "exists=true" >> $GITHUB_OUTPUT
+              echo "url=$pr_url" >> $GITHUB_OUTPUT
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
+              echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create PR if not exists
-        if: steps.prcheck.outputs.exists == 'false'
+        if: steps.prcheck.outputs.exists == 'false' && steps.diffcheck.outputs.sync_required == 'true'
         id: prcreate
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           pr_output=$(gh pr create \
-            --head master \
-            --base master-jdk21 \
-            --title "Sync: master to master-jdk21" \
-            --body "Automated PR to sync latest changes from master to master-jdk21.")
+              --head ${{ env.SOURCE_BRANCH }} \
+              --base ${{ env.TARGET_BRANCH }} \
+              --title "Sync: ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}" \
+              --body "Automated PR to sync latest changes from ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}.")
           pr_url=$(echo "$pr_output" | grep -Eo 'https://github\.com/[^ ]+')
           echo "url=$pr_url" >> $GITHUB_OUTPUT
 
-      - name: Comment and Tag Authors - PR created
-        if: steps.prcreate.outputs.url != ''
+      - name: Comment on PR
+        if: steps.diffcheck.outputs.sync_required == 'true' && steps.collectauthors.outputs.author_mentions != ''
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          PR_URL: ${{ steps.prcreate.outputs.url || steps.prcheck.outputs.url }}
+          IS_NEW: ${{ steps.prcreate.outputs.url != '' }}
         run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            COMMENT_BODY="### 🚀 Committers Requested for Review
-
-              ${{ steps.collectauthors.outputs.author_mentions }}
-              
-              Please review and merge. 🙏"
-            gh pr comment "${{ steps.prcreate.outputs.url }}" --body "$COMMENT_BODY"
+          AUTHOR_MENTIONS="${{ steps.collectauthors.outputs.author_mentions }}"
+          
+          if [ "$IS_NEW" = "true" ]; then
+              HEADER="###  Committers Requested for Review"
+          else
+              HEADER="### 🔄 New commits pushed to open PR"
           fi
+          
+          COMMENT_BODY="$HEADER
 
-      - name: Comment on existing PR
-        if: steps.prcheck.outputs.exists == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-        run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            COMMENT_BODY="### 🔄 New commits pushed to open PR
+${AUTHOR_MENTIONS}
+      
+Please review and merge. 🙏"
+          
+          gh pr comment "$PR_URL" --body "$COMMENT_BODY"
 
-              ${{ steps.collectauthors.outputs.author_mentions }}
-              
-              Please review and merge. 🙏"
-            gh pr comment "${{ steps.prcheck.outputs.url }}" --body "$COMMENT_BODY"
-          fi
-
-      - name: Send Slack notification - PR Created
-        if: steps.prcreate.outputs.url != ''
+      - name: Send Slack notification
+        if: steps.diffcheck.outputs.sync_required == 'true' && steps.collectauthors.outputs.author_mentions != ''
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          PR_URL: ${{ steps.prcreate.outputs.url || steps.prcheck.outputs.url }}
+          IS_NEW: ${{ steps.prcreate.outputs.url != '' }}
         run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            curl -X POST -H 'Content-Type: application/json' \
+          AUTHOR_MENTIONS="${{ steps.collectauthors.outputs.author_mentions }}"
+          
+          if [ "$IS_NEW" = "true" ]; then
+              TEXT="🆕 *PR Created*: <$PR_URL|Sync ${{ env.SOURCE_BRANCH }} to ${{ env.TARGET_BRANCH }}>"
+          else
+              TEXT="🔄 *New commit pushed to ${{ env.SOURCE_BRANCH }}*. PR open: <$PR_URL|View PR>"
+          fi
+          
+          ESCAPED_MENTIONS=$(echo "$AUTHOR_MENTIONS" | sed 's/"/\\"/g')
+          
+          curl -X POST -H 'Content-Type: application/json' \
               --data "{
-                \"text\": \"🆕 *PR Created*: <${{ steps.prcreate.outputs.url }}|Sync master to master-jdk21>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
+                  \"text\": \"$TEXT\n$ESCAPED_MENTIONS\n\nPlease review and merge. 🙏\"
               }" \
               "$SLACK_WEBHOOK_URL"
-          fi
-
-      - name: Send Slack notification - Commit pushed to open PR
-        if: steps.prcheck.outputs.exists == 'true'
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          if [ -n "${{ steps.collectauthors.outputs.author_mentions }}" ]; then
-            curl -X POST -H 'Content-Type: application/json' \
-              --data "{
-                \"text\": \"🔄 *New commit pushed to master*. PR open: <${{ steps.prcheck.outputs.url }}|View PR>\n${{ steps.collectauthors.outputs.author_mentions }}\n\nPlease review and merge. 🙏\"
-              }" \
-              "$SLACK_WEBHOOK_URL"
-          fi
