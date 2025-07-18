@@ -16,8 +16,15 @@ load_excluded_commits() {
 
 is_excluded_commit() {
     local sha=$1
-    local short_sha=${sha:0:8}
-    [[ " ${EXCLUDED_COMMITS[@]} " =~ " ${short_sha} " ]]
+    local short_sha=${sha:0:7}
+    
+    # Check if any excluded commit matches (both short and full SHA)
+    for excluded in "${EXCLUDED_COMMITS[@]}"; do
+        if [[ "$sha" == "$excluded"* ]] || [[ "$short_sha" == "$excluded"* ]]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 has_non_jenkins_files() {
