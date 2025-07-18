@@ -167,7 +167,7 @@ jobs:
           COMMENT_BODY="$HEADER
 
 ${AUTHOR_MENTIONS}
-      
+
 Please review and merge. 🙏"
           
           gh pr comment "$PR_URL" --body "$COMMENT_BODY"
