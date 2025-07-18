@@ -1,0 +1,20 @@
+Testing Commit Ignore Functionality
+===================================
+
+This file is created to test the commit ignore functionality.
+
+Steps:
+1. Create this commit and push to master
+2. Wait for sync PR to be created (master → master-jdk21)
+3. Add this commit SHA to .github/.commitignore
+4. Push the .commitignore update
+5. Verify this commit is excluded from the sync PR
+
+Expected behavior:
+- Initially, this commit should appear in the sync PR
+- After adding to .commitignore, it should be excluded
+- The sync PR should update to remove this commit from the sync
+
+Test timestamp: 2025-07-18
+Purpose: Verify commit ignore functionality works correctly
+EOF < /dev/null
