@@ -1,10 +1,22 @@
-This file is created to test the updated sync workflow.
-The workflow should detect changes between master and master-jdk21 branches and create a PR automatically.
+Workflow Test File
+===================
 
-Testing:
-- Proper checkout of master branch
-- Diff detection between branches
-- PR creation with peter-evans/create-pull-request action
-- Proper use of GH_TOKEN secret
+This is a test file to verify the complete sync workflow cycle:
 
-Adding this additional text to trigger the workflow again and create more differences between branches.
+1. Create dummy commit ✓
+2. Merge to master → triggers sync workflow
+3. Sync PR created (master → master-jdk21)
+4. Merge sync PR to master-jdk21
+5. Revert commit from master → should trigger sync with revert
+6. Verify revert is synced to master-jdk21
+
+Test timestamp: 2025-07-18
+Test commit ID: Will be updated with actual commit hash
+Purpose: Testing enhanced sync workflow with revert detection
+
+Expected behavior:
+- Sync workflow should detect this non-jenkins commit
+- Author should be mentioned in sync PR
+- Revert commit should be properly flagged with ⚠️ indicator
+- Revert should sync to master-jdk21 branch
+EOF < /dev/null
