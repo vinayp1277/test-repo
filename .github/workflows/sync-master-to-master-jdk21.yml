@@ -164,7 +164,7 @@ jobs:
               HEADER="### 🔄 New commits pushed to open PR"
           fi
           
-          COMMENT_BODY="$HEADER
+          COMMENT_BODY="${HEADER}
 
 ${AUTHOR_MENTIONS}
 
