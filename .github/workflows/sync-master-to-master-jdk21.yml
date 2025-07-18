@@ -164,11 +164,14 @@ jobs:
               HEADER="### 🔄 New commits pushed to open PR"
           fi
           
-          COMMENT_BODY="${HEADER}
+          COMMENT_BODY=$(cat <<EOF
+          ${HEADER}
 
-${AUTHOR_MENTIONS}
+          ${AUTHOR_MENTIONS}
 
-Please review and merge. 🙏"
+          Please review and merge. 🙏
+          EOF
+          )
           
           gh pr comment "$PR_URL" --body "$COMMENT_BODY"
 
